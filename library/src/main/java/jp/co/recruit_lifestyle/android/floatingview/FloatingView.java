@@ -52,6 +52,7 @@ import java.lang.ref.WeakReference;
  * FIXME:Nexus5＋YouTubeアプリの場合にナビゲーションバーよりも前面に出てきてしまう
  */
 class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawListener {
+    private static final String TAG = FloatingView.class.getSimpleName();
 
     /**
      * 移動に最低必要なしきい値(dp)

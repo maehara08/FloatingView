@@ -41,6 +41,7 @@ import java.util.ArrayList;
  * TODO:移動を追従する複数表示サポートは第2弾で対応
  */
 public class FloatingViewManager implements ScreenChangedListener, View.OnTouchListener, TrashViewListener {
+    private static final String TAG = FloatingViewManager.class.getSimpleName();
 
     /**
      * 常に表示するモード
