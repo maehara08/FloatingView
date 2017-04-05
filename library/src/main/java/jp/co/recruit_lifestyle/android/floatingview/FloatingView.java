@@ -30,6 +30,7 @@ import android.os.SystemClock;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -45,6 +46,8 @@ import android.widget.FrameLayout;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
+
+import static android.content.ContentValues.TAG;
 
 /**
  * フローティングViewを表すクラスです。
@@ -285,6 +288,21 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * If true, it's a tablet. If false, it's a phone
      */
     private final boolean mIsTablet;
+
+    /**
+     * 座標記録のための記録フレーム数
+     */
+    private float mFrame = 0;
+
+    /**
+     * 5 フレーム前の X 座標
+     */
+    private float mScreenTouch5X = 0;
+
+    /**
+     * 5 フレーム前の Y 座標
+     */
+    private float mScreenTouch5Y = 0;
 
     /**
      * コンストラクタ
@@ -539,6 +557,17 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         mScreenTouchX = event.getRawX();
         mScreenTouchY = event.getRawY();
         final int action = event.getAction();
+
+        // フレームカウント
+        mFrame += 1.0;
+
+        // 5 フレームごとにキャッシュ
+        if (mFrame == 5.0){
+            mScreenTouch5X = mScreenTouchX;
+            mScreenTouch5Y = mScreenTouchY;
+            mFrame = (float) 0;
+        }
+
         // 押下
         if (action == MotionEvent.ACTION_DOWN) {
             // アニメーションのキャンセル
@@ -665,6 +694,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     private void moveToEdge(boolean withAnimation) {
         final int currentX = getXByTouch();
         final int currentY = getYByTouch();
+
         moveToEdge(currentX, currentY, withAnimation);
     }
 
@@ -681,7 +711,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         final int goalPositionX;
         // 画面端に移動する場合は画面端の座標を設定
         if (mMoveDirection == FloatingViewManager.MOVE_DIRECTION_DEFAULT) {
-            final boolean isMoveRightEdge = startX > (mMetrics.widthPixels - getWidth()) / 2;
+            final boolean isMoveRightEdge = startX < (mMetrics.widthPixels - getWidth()) / 2;
             goalPositionX = isMoveRightEdge ? mPositionLimitRect.right : mPositionLimitRect.left;
         }
         // 左端への移動
@@ -697,11 +727,23 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
             goalPositionX = startX;
         }
         // TODO:Y座標もアニメーションさせる
-        final int goalPositionY = startY;
+        //final int goalPositionY = startY;
+        final int goalPositionY;
+        final int start5X = getXByTouch5();
+        final int start5Y = getYByTouch5();
+        if(Math.abs((startY - start5Y)) > 8 && Math.abs((startX-start5X)) > 1){
+            if (mScreenTouch5Y != mScreenTouchY){
+                int tmp = goalPositionX * (startY - start5Y) - (start5X*startY) + (startX*start5Y);
+                goalPositionY = tmp/(startX-start5X);
+            }else{
+                goalPositionY = startY;
+            }
+        }else{
+            goalPositionY  = startY;
+        }
         // 指定座標に移動
         moveTo(startX, startY, goalPositionX, goalPositionY, withAnimation);
     }
-
     /**
      * 指定座標に移動します。<br/>
      * 画面端の座標を超える場合は、自動的に画面端に移動します。
@@ -871,6 +913,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         return (int) (mScreenTouchX - mLocalTouchX);
     }
 
+    private int getXByTouch5(){
+        return (int) (mScreenTouch5X - mLocalTouchX);
+    }
+
     /**
      * タッチ座標から算出されたFloatingViewのY座標
      *
@@ -878,6 +924,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      */
     private int getYByTouch() {
         return (int) (mMetrics.heightPixels + mNavigationBarVerticalOffset - (mScreenTouchY - mLocalTouchY + getHeight()));
+    }
+
+    private int getYByTouch5(){
+        return (int) (mMetrics.heightPixels + mNavigationBarVerticalOffset - (mScreenTouch5Y - mLocalTouchY + getHeight()));
     }
 
     /**
