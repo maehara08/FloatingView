@@ -127,6 +127,12 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     static final int DEFAULT_HEIGHT = ViewGroup.LayoutParams.WRAP_CONTENT;
 
     /**
+     * Default height size
+     */
+    static final int FRAME_BUFFER_NUMBER = 5;
+
+    static final int MOVE_THRESHOLD_Y_ANIMATION = 8;
+    /**
      * WindowManager
      */
     private final WindowManager mWindowManager;
@@ -289,7 +295,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     /**
      * 座標記録のための記録フレーム数
      */
-    private float mCountFrame = 0;
+    private int mCountFrame = 0;
 
     /**
      * 5 フレーム前の X 座標
@@ -559,10 +565,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         ++mCountFrame;
 
         // 5 フレームごとにキャッシュ
-        if (mCountFrame == 5.0) {
+        if (mCountFrame == FRAME_BUFFER_NUMBER) {
             mScreenBufferTouchX = mScreenTouchX;
             mScreenBufferTouchY = mScreenTouchY;
-            mCountFrame = (float) 0;
+            mCountFrame = 0;
         }
 
         // 押下
@@ -707,6 +713,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         final int goalPositionX;
         // 画面端に移動する場合は画面端の座標を設定
         if (mMoveDirection == FloatingViewManager.MOVE_DIRECTION_DEFAULT) {
+            //左右の判定変更
             final boolean isMoveRightEdge = startX < (mMetrics.widthPixels - getWidth()) / 2;
             goalPositionX = isMoveRightEdge ? mPositionLimitRect.right : mPositionLimitRect.left;
         }
@@ -723,14 +730,13 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
             goalPositionX = startX;
         }
         // TODO:Y座標もアニメーションさせる
-        //final int goalPositionY = startY;
         final int goalPositionY;
-        final int start5X = getXByBufferTouch();
-        final int start5Y = getYByBufferTouch();
-        if (Math.abs((startY - start5Y)) > 8 && Math.abs((startX - start5X)) > 1) {
+        final int BufferTouchX = getXByBufferTouch();
+        final int BufferTouchY = getYByBufferTouch();
+        if (Math.abs((startY - BufferTouchY)) > MOVE_THRESHOLD_Y_ANIMATION  && Math.abs((startX - BufferTouchX)) > 1) {
             if (mScreenBufferTouchY != mScreenTouchY) {
-                int tmp = goalPositionX * (startY - start5Y) - (start5X * startY) + (startX * start5Y);
-                goalPositionY = tmp / (startX - start5X);
+                int tmp = goalPositionX * (startY - BufferTouchY) - (BufferTouchX * startY) + (startX * BufferTouchY);
+                goalPositionY = tmp / (startX - BufferTouchX);
             } else {
                 goalPositionY = startY;
             }
