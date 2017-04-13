@@ -41,6 +41,7 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -69,9 +70,9 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     private static final float SCALE_NORMAL = 1.0f;
 
     /**
-     * 画面端移動アニメーションの時間
+     * 画面端移動アニメーションの時間 default = 450L
      */
-    private static final long MOVE_TO_EDGE_DURATION = 450L;
+    private static final long MOVE_TO_EDGE_DURATION = 1000L;
 
     /**
      * 画面端移動アニメーションの係数
@@ -127,11 +128,15 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     static final int DEFAULT_HEIGHT = ViewGroup.LayoutParams.WRAP_CONTENT;
 
     /**
-     * Default height size
+     * 何フレームごとにbufferをとるか
      */
     static final int FRAME_BUFFER_NUMBER = 5;
 
+    /**
+     * Y軸アニメーションのためのしきい値
+     */
     static final int MOVE_THRESHOLD_Y_ANIMATION = 8;
+
     /**
      * WindowManager
      */
@@ -228,9 +233,14 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     private int mNavigationBarHorizontalOffset;
 
     /**
-     * 左・右端に寄せるアニメーション
+     * 左・右端に寄せるアニメーションのXのAnimator
      */
-    private ValueAnimator mMoveEdgeAnimator;
+    private ValueAnimator mMoveEdgeXAnimator;
+
+    /**
+     * 左・右端に寄せるアニメーションのYのAnimator
+     */
+    private ValueAnimator mMoveEdgeYAnimator;
 
     /**
      * Interpolator
@@ -535,8 +545,11 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      */
     @Override
     protected void onDetachedFromWindow() {
-        if (mMoveEdgeAnimator != null) {
-            mMoveEdgeAnimator.removeAllUpdateListeners();
+        if (mMoveEdgeXAnimator != null) {
+            mMoveEdgeXAnimator.removeAllUpdateListeners();
+        }
+        if (mMoveEdgeYAnimator != null) {
+            mMoveEdgeYAnimator.removeAllUpdateListeners();
         }
         super.onDetachedFromWindow();
     }
@@ -758,26 +771,39 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * @param withAnimation アニメーションを行う場合はtrue.行わない場合はfalse
      */
     private void moveTo(int currentX, int currentY, int goalPositionX, int goalPositionY, boolean withAnimation) {
+        if (currentY != goalPositionY) {
+            //Animationしたということ
+            Toast.makeText(getContext(), "Animationed", Toast.LENGTH_SHORT).show();
+        }
         // 画面端からはみ出さないように調整
         goalPositionX = Math.min(Math.max(mPositionLimitRect.left, goalPositionX), mPositionLimitRect.right);
         goalPositionY = Math.min(Math.max(mPositionLimitRect.top, goalPositionY), mPositionLimitRect.bottom);
         // アニメーションを行う場合
         if (withAnimation) {
             // TODO:Y座標もアニメーションさせる
-            mParams.y = goalPositionY;
-
-            mMoveEdgeAnimator = ValueAnimator.ofInt(currentX, goalPositionX);
-            mMoveEdgeAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            mMoveEdgeXAnimator = ValueAnimator.ofInt(currentX, goalPositionX);
+            mMoveEdgeYAnimator = ValueAnimator.ofInt(currentY, goalPositionY);
+            mMoveEdgeXAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator animation) {
                     mParams.x = (Integer) animation.getAnimatedValue();
                     mWindowManager.updateViewLayout(FloatingView.this, mParams);
                 }
             });
+            mMoveEdgeYAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    mParams.y = (int) animation.getAnimatedValue();
+                    mWindowManager.updateViewLayout(FloatingView.this, mParams);
+                }
+            });
             // X軸のアニメーション設定
-            mMoveEdgeAnimator.setDuration(MOVE_TO_EDGE_DURATION);
-            mMoveEdgeAnimator.setInterpolator(mMoveEdgeInterpolator);
-            mMoveEdgeAnimator.start();
+            mMoveEdgeXAnimator.setDuration(MOVE_TO_EDGE_DURATION);
+            mMoveEdgeXAnimator.setInterpolator(mMoveEdgeInterpolator);
+            mMoveEdgeXAnimator.start();
+            mMoveEdgeYAnimator.setDuration(MOVE_TO_EDGE_DURATION);
+            mMoveEdgeYAnimator.setInterpolator(mMoveEdgeInterpolator);
+            mMoveEdgeYAnimator.start();
         } else {
             // 位置が変化した時のみ更新
             if (mParams.x != goalPositionX || mParams.y != goalPositionY) {
@@ -798,9 +824,13 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * アニメーションをキャンセルします。
      */
     private void cancelAnimation() {
-        if (mMoveEdgeAnimator != null && mMoveEdgeAnimator.isStarted()) {
-            mMoveEdgeAnimator.cancel();
-            mMoveEdgeAnimator = null;
+        if (mMoveEdgeXAnimator != null && mMoveEdgeXAnimator.isStarted()) {
+            mMoveEdgeXAnimator.cancel();
+            mMoveEdgeXAnimator = null;
+        }
+        if (mMoveEdgeYAnimator != null && mMoveEdgeYAnimator.isStarted()) {
+            mMoveEdgeYAnimator.cancel();
+            mMoveEdgeYAnimator = null;
         }
     }
 
