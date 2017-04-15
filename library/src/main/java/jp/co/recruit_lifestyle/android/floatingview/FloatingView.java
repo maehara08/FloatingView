@@ -46,6 +46,7 @@ import android.widget.Toast;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
+import java.nio.Buffer;
 
 /**
  * フローティングViewを表すクラスです。
@@ -724,7 +725,36 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         //TODO:縦軸の速度も考慮して斜めに行くようにする
         // X・Y座標と移動方向を設定
         final int goalPositionX;
-        // 画面端に移動する場合は画面端の座標を設定
+        // FRAME_BUFFER_NUMBER 前のX座標
+        final int BufferTouchX = getXByBufferTouch();
+        // FRAME_BUFFER_NUMBER 前のY座標
+        final int BufferTouchY = getYByBufferTouch();
+        // 横軸方向の速度
+        final float SpeedX = (startX - BufferTouchX)/FRAME_BUFFER_NUMBER;
+        //横軸方向の加速度
+        final float AccelerationX = SpeedX/FRAME_BUFFER_NUMBER;
+        // 縦軸方向の速度
+        final float SpeedY = (startY - BufferTouchY)/FRAME_BUFFER_NUMBER;
+        // 縦軸方向の速度
+        final float AccelerationY = SpeedY/FRAME_BUFFER_NUMBER;
+        // 縦軸方向の移動判定
+        if (Math.abs(AccelerationX) >= 0) {
+            if ((startX - BufferTouchX) > 0) {
+                Toast.makeText(getContext(), "AccelerationX", Toast.LENGTH_SHORT).show();
+                goalPositionX = mPositionLimitRect.right;
+            }
+            else if((startX - BufferTouchX) < 0) {
+                Toast.makeText(getContext(), "AccelerationX", Toast.LENGTH_SHORT).show();
+                goalPositionX = mPositionLimitRect.left;
+            }else {
+                Toast.makeText(getContext(), "startx -buffer = 0", Toast.LENGTH_SHORT).show();
+                final boolean isMoveRightEdge = startX > (mMetrics.widthPixels - getWidth()) / 2;
+                goalPositionX = isMoveRightEdge ? mPositionLimitRect.right : mPositionLimitRect.left;
+           }
+        } else {
+            goalPositionX = startX;
+        }
+/*        // 画面端に移動する場合は画面端の座標を設定
         if (mMoveDirection == FloatingViewManager.MOVE_DIRECTION_DEFAULT) {
             //左右の判定変更
             final boolean isMoveRightEdge = startX < (mMetrics.widthPixels - getWidth()) / 2;
@@ -742,10 +772,9 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         else {
             goalPositionX = startX;
         }
+*/
         // TODO:Y座標もアニメーションさせる
         final int goalPositionY;
-        final int BufferTouchX = getXByBufferTouch();
-        final int BufferTouchY = getYByBufferTouch();
         if (Math.abs((startY - BufferTouchY)) > MOVE_THRESHOLD_Y_ANIMATION  && Math.abs((startX - BufferTouchX)) > 1) {
             if (mScreenBufferTouchY != mScreenTouchY) {
                 int tmp = goalPositionX * (startY - BufferTouchY) - (BufferTouchX * startY) + (startX * BufferTouchY);
@@ -773,7 +802,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     private void moveTo(int currentX, int currentY, int goalPositionX, int goalPositionY, boolean withAnimation) {
         if (currentY != goalPositionY) {
             //Animationしたということ
-            Toast.makeText(getContext(), "Animationed", Toast.LENGTH_SHORT).show();
+            //Toast.makeText(getContext(), "Animationed", Toast.LENGTH_SHORT).show();
         }
         // 画面端からはみ出さないように調整
         goalPositionX = Math.min(Math.max(mPositionLimitRect.left, goalPositionX), mPositionLimitRect.right);
