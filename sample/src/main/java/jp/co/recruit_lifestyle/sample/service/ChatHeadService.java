@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
 import android.util.DisplayMetrics;
@@ -57,6 +58,15 @@ public class ChatHeadService extends Service implements FloatingViewListener {
             @Override
             public void onClick(View v) {
                 Log.d(TAG, getString(R.string.chathead_click_message));
+//                View content = new View(ChatHeadService.this);
+//                content.setBackgroundColor(Color.RED);
+//                mFloatingViewManager.openFullView(content);
+                if (!mFloatingViewManager.isTopViewVisible()) {
+                    View content = new View(ChatHeadService.this);
+                    content.setBackgroundColor(Color.RED);
+                    mFloatingViewManager.openFullView(content);
+                }
+
             }
         });
 

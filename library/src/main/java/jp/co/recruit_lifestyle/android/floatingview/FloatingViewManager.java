@@ -16,18 +16,25 @@
 
 package jp.co.recruit_lifestyle.android.floatingview;
 
+import android.animation.Animator;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.IntDef;
 import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
@@ -131,6 +138,16 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
      * FloatingViewを削除するViewです。
      */
     private final TrashView mTrashView;
+
+    /**
+     * 拡大して表示するView
+     */
+    private FrameLayout mTopFloatingView;
+
+    /**
+     * 要確認
+     */
+    private FrameLayout mTopFloatingBG;
 
     /**
      * FloatingViewListener
@@ -322,6 +339,10 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         }
         // 移動
         else if (action == MotionEvent.ACTION_MOVE) {
+            // expandされていたら閉じる
+            if (isTopViewVisible()) {
+                closeFullView();
+            }
             // 今回の状態
             final boolean isIntersecting = isIntersectWithTrash();
             // これまでの状態
@@ -371,6 +392,126 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         }
 
         return false;
+    }
+
+    /**
+     * Viewを拡大する
+     * public なメソッド
+     */
+    public void openFullView(final View content) {
+        if (mTargetFloatingView != null) {
+            mTargetFloatingView.moveToTop(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator pAnimator) {
+
+                }
+
+                @Override
+                public void onAnimationEnd(Animator pAnimator) {
+                    displayTopWindow(content);
+                }
+
+                @Override
+                public void onAnimationCancel(Animator pAnimator) {
+                }
+
+                @Override
+                public void onAnimationRepeat(Animator pAnimator) {
+                }
+            });
+        }
+    }
+
+    /**
+     * 拡大されているViewが表示されているかどうか
+     */
+    public boolean isTopViewVisible() {
+        return mTopFloatingView != null;
+    }
+
+    /**
+     * 拡大して表示する
+     *
+     * @param content View
+     */
+    private void displayTopWindow(View content) {
+        //topfloatingbg
+        DisplayMetrics lDisplayMetrics = new DisplayMetrics();
+        ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getMetrics(lDisplayMetrics);
+        mTopFloatingBG = new FrameLayout(mContext);
+        mTopFloatingBG.setBackgroundColor(Color.parseColor("#8a000000"));
+        WindowManager.LayoutParams lLayoutParamsBG = getTopViewLayoutParams();
+        lLayoutParamsBG.x = 0;
+        lLayoutParamsBG.y = 0;
+        lLayoutParamsBG.width = lDisplayMetrics.widthPixels;
+        lLayoutParamsBG.height = lDisplayMetrics.heightPixels;
+        lLayoutParamsBG.gravity = Gravity.LEFT | Gravity.TOP;
+        mWindowManager.addView(mTopFloatingBG, lLayoutParamsBG);
+
+        // FloatingView
+        mTopFloatingView = new FrameLayout(mContext);
+
+        if (content != null) {
+            mTopFloatingView.addView(content);
+        }
+        mTopFloatingView.setFocusableInTouchMode(true);
+        mTopFloatingView.setPadding(20, 20, 20, 20);
+        mTopFloatingView.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View pView, int i, KeyEvent pKeyEvent) {
+                Log.d("asdf", "asdf");
+                switch (pKeyEvent.getAction()) {
+                    case KeyEvent.ACTION_DOWN:
+                        if (pKeyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+                            closeFullView();
+                            return true;
+                        }
+                }
+                return false;
+            }
+        });
+        // Viewの貼り付け
+
+        WindowManager.LayoutParams lLayoutParams = getTopViewLayoutParams();
+        lLayoutParams.x = 0;
+        lLayoutParams.y = mTargetFloatingView.getPositionLimitRect().top + mTargetFloatingView.getMeasuredHeight();
+        lLayoutParams.width = lDisplayMetrics.widthPixels;
+        lLayoutParams.height = lDisplayMetrics.heightPixels - mTargetFloatingView.getMeasuredHeight() - mTargetFloatingView.getStatusBarHeight();
+        lLayoutParams.gravity = Gravity.LEFT | Gravity.TOP;
+        mWindowManager.addView(mTopFloatingView, lLayoutParams);
+
+
+        // 最初の貼り付け時の場合のみ、フルスクリーン監視Viewと削除Viewを貼り付け
+    }
+
+    /**
+     * 拡大したViewを閉じる
+     */
+    private void closeFullView() {
+        if (mTopFloatingView != null) {
+            mWindowManager.removeViewImmediate(mTopFloatingView);
+            mWindowManager.removeViewImmediate(mTopFloatingBG);
+            mTopFloatingView = null;
+            mTopFloatingBG = null;
+        }
+    }
+
+    /**
+     * TODO
+     *
+     * @return
+     */
+    private WindowManager.LayoutParams getTopViewLayoutParams() {
+        WindowManager.LayoutParams mParams = new WindowManager.LayoutParams();
+        mParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        mParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        mParams.type = WindowManager.LayoutParams.TYPE_PHONE;
+        mParams.flags =
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
+                        WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+        mParams.format = PixelFormat.RGBA_8888;
+        return mParams;
     }
 
     /**
