@@ -41,10 +41,12 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
+import java.nio.Buffer;
 
 /**
  * フローティングViewを表すクラスです。
@@ -69,9 +71,9 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     private static final float SCALE_NORMAL = 1.0f;
 
     /**
-     * 画面端移動アニメーションの時間
+     * 画面端移動アニメーションの時間 default = 450L
      */
-    private static final long MOVE_TO_EDGE_DURATION = 450L;
+    private static final long MOVE_TO_EDGE_DURATION = 1000L;
 
     /**
      * 画面端移動アニメーションの係数
@@ -125,6 +127,16 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * Default height size
      */
     static final int DEFAULT_HEIGHT = ViewGroup.LayoutParams.WRAP_CONTENT;
+
+    /**
+     * 何フレームごとにbufferをとるか
+     */
+    static final int FRAME_BUFFER_NUMBER = 5;
+
+    /**
+     * Y軸アニメーションのためのしきい値
+     */
+    static final int MOVE_THRESHOLD_Y_ANIMATION = 8;
 
     /**
      * WindowManager
@@ -222,9 +234,14 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     private int mNavigationBarHorizontalOffset;
 
     /**
-     * 左・右端に寄せるアニメーション
+     * 左・右端に寄せるアニメーションのXのAnimator
      */
-    private ValueAnimator mMoveEdgeAnimator;
+    private ValueAnimator mMoveEdgeXAnimator;
+
+    /**
+     * 左・右端に寄せるアニメーションのYのAnimator
+     */
+    private ValueAnimator mMoveEdgeYAnimator;
 
     /**
      * Interpolator
@@ -285,6 +302,21 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * If true, it's a tablet. If false, it's a phone
      */
     private final boolean mIsTablet;
+
+    /**
+     * 座標記録のための記録フレーム数
+     */
+    private int mCountFrame = 0;
+
+    /**
+     * 5 フレーム前の X 座標
+     */
+    private float mScreenBufferTouchX = 0;
+
+    /**
+     * 5 フレーム前の Y 座標
+     */
+    private float mScreenBufferTouchY = 0;
 
     /**
      * コンストラクタ
@@ -514,8 +546,11 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      */
     @Override
     protected void onDetachedFromWindow() {
-        if (mMoveEdgeAnimator != null) {
-            mMoveEdgeAnimator.removeAllUpdateListeners();
+        if (mMoveEdgeXAnimator != null) {
+            mMoveEdgeXAnimator.removeAllUpdateListeners();
+        }
+        if (mMoveEdgeYAnimator != null) {
+            mMoveEdgeYAnimator.removeAllUpdateListeners();
         }
         super.onDetachedFromWindow();
     }
@@ -539,6 +574,17 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         mScreenTouchX = event.getRawX();
         mScreenTouchY = event.getRawY();
         final int action = event.getAction();
+
+        // フレームカウント
+        ++mCountFrame;
+
+        // 5 フレームごとにキャッシュ
+        if (mCountFrame == FRAME_BUFFER_NUMBER) {
+            mScreenBufferTouchX = mScreenTouchX;
+            mScreenBufferTouchY = mScreenTouchY;
+            mCountFrame = 0;
+        }
+
         // 押下
         if (action == MotionEvent.ACTION_DOWN) {
             // アニメーションのキャンセル
@@ -679,9 +725,39 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         //TODO:縦軸の速度も考慮して斜めに行くようにする
         // X・Y座標と移動方向を設定
         final int goalPositionX;
-        // 画面端に移動する場合は画面端の座標を設定
+        // FRAME_BUFFER_NUMBER 前のX座標
+        final int BufferTouchX = getXByBufferTouch();
+        // FRAME_BUFFER_NUMBER 前のY座標
+        final int BufferTouchY = getYByBufferTouch();
+        // 横軸方向の速度
+        final float SpeedX = (startX - BufferTouchX)/FRAME_BUFFER_NUMBER;
+        //横軸方向の加速度
+        final float AccelerationX = SpeedX/FRAME_BUFFER_NUMBER;
+        // 縦軸方向の速度
+        final float SpeedY = (startY - BufferTouchY)/FRAME_BUFFER_NUMBER;
+        // 縦軸方向の速度
+        final float AccelerationY = SpeedY/FRAME_BUFFER_NUMBER;
+        // 縦軸方向の移動判定
+        if (Math.abs(AccelerationX) >= 0) {
+            if ((startX - BufferTouchX) > 0) {
+                Toast.makeText(getContext(), "AccelerationX", Toast.LENGTH_SHORT).show();
+                goalPositionX = mPositionLimitRect.right;
+            }
+            else if((startX - BufferTouchX) < 0) {
+                Toast.makeText(getContext(), "AccelerationX", Toast.LENGTH_SHORT).show();
+                goalPositionX = mPositionLimitRect.left;
+            }else {
+                Toast.makeText(getContext(), "startx -buffer = 0", Toast.LENGTH_SHORT).show();
+                final boolean isMoveRightEdge = startX > (mMetrics.widthPixels - getWidth()) / 2;
+                goalPositionX = isMoveRightEdge ? mPositionLimitRect.right : mPositionLimitRect.left;
+           }
+        } else {
+            goalPositionX = startX;
+        }
+/*        // 画面端に移動する場合は画面端の座標を設定
         if (mMoveDirection == FloatingViewManager.MOVE_DIRECTION_DEFAULT) {
-            final boolean isMoveRightEdge = startX > (mMetrics.widthPixels - getWidth()) / 2;
+            //左右の判定変更
+            final boolean isMoveRightEdge = startX < (mMetrics.widthPixels - getWidth()) / 2;
             goalPositionX = isMoveRightEdge ? mPositionLimitRect.right : mPositionLimitRect.left;
         }
         // 左端への移動
@@ -696,8 +772,19 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         else {
             goalPositionX = startX;
         }
+*/
         // TODO:Y座標もアニメーションさせる
-        final int goalPositionY = startY;
+        final int goalPositionY;
+        if (Math.abs((startY - BufferTouchY)) > MOVE_THRESHOLD_Y_ANIMATION  && Math.abs((startX - BufferTouchX)) > 1) {
+            if (mScreenBufferTouchY != mScreenTouchY) {
+                int tmp = goalPositionX * (startY - BufferTouchY) - (BufferTouchX * startY) + (startX * BufferTouchY);
+                goalPositionY = tmp / (startX - BufferTouchX);
+            } else {
+                goalPositionY = startY;
+            }
+        } else {
+            goalPositionY = startY;
+        }
         // 指定座標に移動
         moveTo(startX, startY, goalPositionX, goalPositionY, withAnimation);
     }
@@ -713,26 +800,39 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * @param withAnimation アニメーションを行う場合はtrue.行わない場合はfalse
      */
     private void moveTo(int currentX, int currentY, int goalPositionX, int goalPositionY, boolean withAnimation) {
+        if (currentY != goalPositionY) {
+            //Animationしたということ
+            //Toast.makeText(getContext(), "Animationed", Toast.LENGTH_SHORT).show();
+        }
         // 画面端からはみ出さないように調整
         goalPositionX = Math.min(Math.max(mPositionLimitRect.left, goalPositionX), mPositionLimitRect.right);
         goalPositionY = Math.min(Math.max(mPositionLimitRect.top, goalPositionY), mPositionLimitRect.bottom);
         // アニメーションを行う場合
         if (withAnimation) {
             // TODO:Y座標もアニメーションさせる
-            mParams.y = goalPositionY;
-
-            mMoveEdgeAnimator = ValueAnimator.ofInt(currentX, goalPositionX);
-            mMoveEdgeAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            mMoveEdgeXAnimator = ValueAnimator.ofInt(currentX, goalPositionX);
+            mMoveEdgeYAnimator = ValueAnimator.ofInt(currentY, goalPositionY);
+            mMoveEdgeXAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator animation) {
                     mParams.x = (Integer) animation.getAnimatedValue();
                     mWindowManager.updateViewLayout(FloatingView.this, mParams);
                 }
             });
+            mMoveEdgeYAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    mParams.y = (int) animation.getAnimatedValue();
+                    mWindowManager.updateViewLayout(FloatingView.this, mParams);
+                }
+            });
             // X軸のアニメーション設定
-            mMoveEdgeAnimator.setDuration(MOVE_TO_EDGE_DURATION);
-            mMoveEdgeAnimator.setInterpolator(mMoveEdgeInterpolator);
-            mMoveEdgeAnimator.start();
+            mMoveEdgeXAnimator.setDuration(MOVE_TO_EDGE_DURATION);
+            mMoveEdgeXAnimator.setInterpolator(mMoveEdgeInterpolator);
+            mMoveEdgeXAnimator.start();
+            mMoveEdgeYAnimator.setDuration(MOVE_TO_EDGE_DURATION);
+            mMoveEdgeYAnimator.setInterpolator(mMoveEdgeInterpolator);
+            mMoveEdgeYAnimator.start();
         } else {
             // 位置が変化した時のみ更新
             if (mParams.x != goalPositionX || mParams.y != goalPositionY) {
@@ -753,9 +853,13 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * アニメーションをキャンセルします。
      */
     private void cancelAnimation() {
-        if (mMoveEdgeAnimator != null && mMoveEdgeAnimator.isStarted()) {
-            mMoveEdgeAnimator.cancel();
-            mMoveEdgeAnimator = null;
+        if (mMoveEdgeXAnimator != null && mMoveEdgeXAnimator.isStarted()) {
+            mMoveEdgeXAnimator.cancel();
+            mMoveEdgeXAnimator = null;
+        }
+        if (mMoveEdgeYAnimator != null && mMoveEdgeYAnimator.isStarted()) {
+            mMoveEdgeYAnimator.cancel();
+            mMoveEdgeYAnimator = null;
         }
     }
 
@@ -871,6 +975,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         return (int) (mScreenTouchX - mLocalTouchX);
     }
 
+    private int getXByBufferTouch() {
+        return (int) (mScreenBufferTouchX - mLocalTouchX);
+    }
+
     /**
      * タッチ座標から算出されたFloatingViewのY座標
      *
@@ -878,6 +986,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      */
     private int getYByTouch() {
         return (int) (mMetrics.heightPixels + mNavigationBarVerticalOffset - (mScreenTouchY - mLocalTouchY + getHeight()));
+    }
+
+    private int getYByBufferTouch() {
+        return (int) (mMetrics.heightPixels + mNavigationBarVerticalOffset - (mScreenBufferTouchY - mLocalTouchY + getHeight()));
     }
 
     /**
