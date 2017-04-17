@@ -28,10 +28,8 @@ import android.os.Build;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.IntDef;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
-import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -145,9 +143,14 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
     private FrameLayout mTopFloatingView;
 
     /**
-     * 要確認
+     * 背景のView
      */
     private FrameLayout mTopFloatingBG;
+
+    /**
+     * ViewがExpandしていたらTrue
+     */
+    private boolean mIsTopViewExpand = false;
 
     /**
      * FloatingViewListener
@@ -426,7 +429,7 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
      * 拡大されているViewが表示されているかどうか
      */
     public boolean isTopViewVisible() {
-        return mTopFloatingView != null;
+        return mIsTopViewExpand;
     }
 
     /**
@@ -449,13 +452,23 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         mWindowManager.addView(mTopFloatingBG, lLayoutParamsBG);
 
         // FloatingView
-        mTopFloatingView = new FrameLayout(mContext);
-
-        if (content != null) {
+        if (mTopFloatingView == null) {
+            FullTopView.DispatchKeyEventListener listener = new FullTopView.DispatchKeyEventListener() {
+                @Override
+                public void onBackKeyDown() {
+                    closeFullView();
+                }
+            };
+            mTopFloatingView = new FullTopView(mContext, listener);
             mTopFloatingView.addView(content);
         }
+        // Viewの貼り付け
+
         mTopFloatingView.setFocusableInTouchMode(true);
         mTopFloatingView.setPadding(20, 20, 20, 20);
+
+        // TODO: 2017/04/17 二回目からイベントを拾えないため、力技で対応
+        /*
         mTopFloatingView.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View pView, int i, KeyEvent pKeyEvent) {
@@ -470,8 +483,7 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
                 return false;
             }
         });
-        // Viewの貼り付け
-
+        */
         WindowManager.LayoutParams lLayoutParams = getTopViewLayoutParams();
         lLayoutParams.x = 0;
         lLayoutParams.y = mTargetFloatingView.getPositionLimitRect().top + mTargetFloatingView.getMeasuredHeight();
@@ -480,6 +492,8 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         lLayoutParams.gravity = Gravity.LEFT | Gravity.TOP;
         mWindowManager.addView(mTopFloatingView, lLayoutParams);
 
+        mTopFloatingView.setVisibility(View.VISIBLE);
+        mIsTopViewExpand = true;
 
         // 最初の貼り付け時の場合のみ、フルスクリーン監視Viewと削除Viewを貼り付け
     }
@@ -491,7 +505,8 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         if (mTopFloatingView != null) {
             mWindowManager.removeViewImmediate(mTopFloatingView);
             mWindowManager.removeViewImmediate(mTopFloatingBG);
-            mTopFloatingView = null;
+            mTopFloatingView.setVisibility(View.GONE);
+            mIsTopViewExpand = false;
             mTopFloatingBG = null;
         }
     }
